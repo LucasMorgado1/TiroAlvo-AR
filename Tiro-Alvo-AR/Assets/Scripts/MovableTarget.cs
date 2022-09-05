@@ -4,60 +4,28 @@ using UnityEngine;
 
 public class MovableTarget : Target
 {
-    [SerializeField] private float verticalLimit = 0;
-    [SerializeField] private float horizontalLimit = 0;
-    [SerializeField] private float speed = 10;
+    public float moveSpeed = 200f;
+    public float frequency = 2f;
+    public float magnitude = 200f;
 
-    private bool directionSwitch;
-    private bool direction;
+    Camera cam;
 
-    private Vector2 maxPos;
-    private Vector2 minPos;
+    private Vector3 pos;
 
+    // Start is called before the first frame update
     protected override void Start()
     {
         base.Start();
-        DirectionDefinition();
+        pos = transform.position;
+        cam = Camera.main;
     }
 
+    // Update is called once per frame
     protected override void Update()
     {
         base.Update();
-        TargetMovement(maxPos, minPos);
-    }
+        transform.LookAt(cam.transform);
 
-    private void DirectionDefinition()
-    {
-        int dir = Random.Range(0,1);
-
-        direction = dir == 0 ? true : false;
-
-        if (direction)
-        {
-            maxPos = new Vector2(transform.position.x + horizontalLimit, transform.position.y);
-            minPos = new Vector2(transform.position.x - horizontalLimit, transform.position.y);
-            return;
-        }
-
-        maxPos = new Vector2(transform.position.x, transform.position.y + verticalLimit);
-        minPos = new Vector2(transform.position.x, transform.position.y - verticalLimit);
-    }
-
-    private void TargetMovement(Vector3 maxPoint, Vector3 minPoint)
-    {
-        if (directionSwitch)
-        {
-            PositionLerp(maxPoint);
-            if (Vector3.Distance(transform.position, maxPoint) <= 0) directionSwitch = false;
-            return;
-        }
-
-        PositionLerp(minPoint);
-        if (Vector3.Distance(transform.position, minPoint) <= 0) directionSwitch = true;
-    }
-
-    private Vector3 PositionLerp(Vector3 point)
-    {
-        return Vector3.Lerp(transform.position, point, speed * Time.deltaTime);
+        transform.position += transform.right * Time.deltaTime * moveSpeed;
     }
 }
