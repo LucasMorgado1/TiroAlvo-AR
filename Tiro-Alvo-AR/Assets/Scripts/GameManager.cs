@@ -12,15 +12,18 @@ public class GameManager : MonoBehaviour
 {
     // CONTROLE AR
     public ARRaycastManager raycastManager;
-    public ARPlaneManager planeManager; //é o que detecta o ambiente (planos)
+    public ARPlaneManager planeManager; //ï¿½ o que detecta o ambiente (planos)
     private ARPlane plano; //variavel que vai salvar os ids encontrados
     [SerializeField] private GameObject alvo;
+    [SerializeField] private GameObject alvoMovel;
+    [SerializeField] private GameObject alvoMal;
     [SerializeField] private TextMeshProUGUI score;
-    [SerializeField] private GameObject crosshair;
-
+    [SerializeField] private Image crosshair;
     // CONTROLE DO JOGO
     private int pontuacao;
-    public int numeroAlvos = 15;
+    public int numeroMaxAlvos = 10;
+    private int numeroInimigos = default;
+    public int alvosAleatorios = 3;
     private bool acabou = false;
 
     // TIMER
@@ -44,36 +47,24 @@ public class GameManager : MonoBehaviour
 
     void Update()
     {
-        if (!acabou)
-        {
-            TratarPlano();
-            TratarMira();
-        } else
+        TratarTimer();
+
+        if (acabou)
         {
             AparecerUIFimJogo();
+            return;
         }
 
-        if (timerActive) 
-        {
-            currentTime -= Time.deltaTime;
-            if (currentTime <= 0) 
-            {
-                timerActive = false;
-                AparecerUIFimJogo();
-                Start();
-            }
-        }
-
-        TimeSpan time = TimeSpan.FromSeconds(currentTime);
-        currentTimeText.text = "Timer: " + time.Seconds.ToString(); 
+        TratarPlano();
+        TratarMira();
     }
 
+    #region Setup de Tela
     private void TratarPlano() 
     {
-        if (plano != null)
-            return;
+        if (plano != null) return;
 
-        ScreenPosition();
+        //ScreenPosition();
 
         var hits = new List<ARRaycastHit>();
 
@@ -86,7 +77,7 @@ public class GameManager : MonoBehaviour
 
             if (Input.touchCount == 1 && Input.GetTouch(0).phase == TouchPhase.Began)
             {
-                ComecarJogo(hits[0]); //aqui eu passo o ponto em que bateu enquanto também chamo a função de comecar jogo
+                ComecarJogo(hits[0]); //aqui eu passo o ponto em que bateu enquanto tambï¿½m chamo a funï¿½ï¿½o de comecar jogo
                 timerActive = true;
             }
         }
@@ -97,7 +88,7 @@ public class GameManager : MonoBehaviour
         Vector2 position = new Vector2(0.5f, 0.5f);
         return Camera.main.ViewportToScreenPoint(position);
     }
-
+    #endregion
     private void ComecarJogo (ARRaycastHit hit)
     {
         var idPlano = hit.trackableId; //aqui eu atribuo o id do objeto em que bateu
@@ -106,30 +97,62 @@ public class GameManager : MonoBehaviour
         transform.GetChild(0).gameObject.SetActive(false); //desativo o cursor
         planeManager.enabled = false;
 
-        CriarAlvo();
+        CriarAlvo(alvo);
     }
 
+    #region Setup Alvo
     private Vector3 ObterPontoAleatorio() 
     {
-        var x = Random.Range(-1f, 0.5f);
-        var z = Random.Range(-1f, 0.5f);
-        var y = Random.Range(.1f, .9f);
+        var x = Random.Range(-0.7f, 0.5f);
+        var z = Random.Range(-0.7f, 0.5f);
+        var y = Random.Range(.5f, .9f);
 
         var vetorAleatorio = new Vector3(x, y, z);
 
-        var posicaoAleatoria = plano.transform.TransformPoint(vetorAleatorio); //pega um ponto aleatório no plano
+        var posicaoAleatoria = plano.transform.TransformPoint(vetorAleatorio); //pega um ponto aleatï¿½rio no plano
 
         return posicaoAleatoria;
     }
 
-    private void CriarAlvo() 
+    private void CriarAlvo(GameObject prefab) 
     {
         var pontoAleatorio = ObterPontoAleatorio();
 
-        GameObject target = GameObject.Instantiate(alvo, pontoAleatorio, Quaternion.identity);
+        if (numeroInimigos < numeroMaxAlvos) { 
 
-        target.transform.LookAt(Camera.main.transform);
+            GameObject target = GameObject.Instantiate(prefab, pontoAleatorio, Quaternion.identity);
+
+            numeroInimigos++;
+
+            if (target.CompareTag("Inimigo"))
+                StartCoroutine(BombTimer(target));
+
+            target.transform.LookAt(Camera.main.transform);
+        }
     }
+
+    private void RandomTargets()
+    {
+        for (int i = 0; i < alvosAleatorios; i++)
+            CriarAlvo(TargetTypeRandomizer());
+    }
+
+    private GameObject TargetTypeRandomizer()
+    {
+        int value = Random.Range(0,101);
+
+        switch (value)
+        {
+            case int n when n <= 20:
+                return alvoMal;
+            case int n when n <= 60:
+                return alvoMovel;
+            default:
+                return alvo;
+        }
+    }
+
+    #endregion
 
     private void TratarMira() 
     {
@@ -138,37 +161,83 @@ public class GameManager : MonoBehaviour
         var cam = Camera.main.transform;
         if (Physics.Raycast(cam.position, cam.forward, out hitInfo, 1000000f))
         {
-            if (hitInfo.transform.CompareTag("Alvo") &&  Input.touchCount == 1 && Input.GetTouch(0).phase == TouchPhase.Began)
-            {
-                Destroy(hitInfo.transform.gameObject);
-                TratarAcerto();
-            }
-        }
+            if (hitInfo.transform.CompareTag("Alvo") || hitInfo.transform.CompareTag("Inimigo"))
+                crosshair.color = Color.red;
+
+            CheckTargetType(hitInfo);
+
+        } else  
+            crosshair.color = Color.white;
+
     }
 
-    private void TratarAcerto()
+    private void CheckTargetType(RaycastHit hit)
     {
-        pontuacao += 10;
+        if (hit.transform.CompareTag("Inimigo") && InputCheck)
+        {
+            pontuacao -= 20;
+            numeroInimigos--;
+            score.text = "Score: " + pontuacao.ToString();
+            Destroy(hit.transform.gameObject);
+        }
+
+        if (hit.transform.CompareTag("Alvo") && InputCheck)
+        {
+            TratarAcerto(hit.transform.gameObject);
+        }
+
+    }
+
+    private bool InputCheck => Input.touchCount == 1 && Input.GetTouch(0).phase == TouchPhase.Began;
+
+    private void TratarAcerto(GameObject target)
+    {
+        pontuacao += target.GetComponentInParent<Target>().currentScore;
         score.text = "Score: " + pontuacao.ToString();
-        numeroAlvos--;
-        if (numeroAlvos > 0 || currentTime > 0)
-            CriarAlvo();
+        numeroInimigos--;
+        Destroy(target);
+        AudioManager.Instance.Play("Bubble");
+        if (currentTime > 0)
+            RandomTargets();
         else
             acabou = true;
     }
 
+    private void TratarTimer()
+    {
+        if (!timerActive) return;
+
+        currentTime -= Time.deltaTime;
+        if (currentTime <= 0)
+        {
+            timerActive = false;
+            AparecerUIFimJogo();
+            Start();
+        }
+
+        TimeSpan time = TimeSpan.FromSeconds(currentTime);
+        currentTimeText.text = "Timer: " + time.Seconds.ToString();
+    }
+
+    #region Fim de Jogo
     private void AparecerUIFimJogo () 
     {
         ui.onGame.SetActive(false);
         ui.onDefeat.SetActive(true);
-        ui.score = this.score;
+        ui.score.text = "Your score: " + pontuacao;
     }
 
     public void TratarFimJogo ()
     {
-        if (Input.touchCount == 1 && Input.GetTouch(0).phase == TouchPhase.Began)
-        {
-            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+    IEnumerator BombTimer (GameObject a) {
+        yield return new WaitForSeconds(5f);
+        if (a != null) {
+            numeroInimigos--;
+            Destroy(a);
         }
     }
+    #endregion
 }
